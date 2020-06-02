@@ -1,0 +1,178 @@
+---
+title: "STA 5320 Homework 5"
+author: "Kevin Bailey"
+date: "2/26/19"
+output: html_document
+---
+
+# Question 4
+
+```{r}
+library(ISLR)
+
+y <- Khan$ytrain
+X <- Khan$xtrain
+```
+
+## Solution.
+
+### Part (a)
+$p$ is $X$ in our case(2308 columns for each row, so $X$ is a 63x2308 matrix), which is the gene expression values. $n$ is $y$ here(size 63), which represents the type of a certain cancer an individual has. 
+
+### Part (b)
+```{r}
+#summary(lm(y ~ -1 + X))
+```
+
+This shows that after 63(no intercept here, and 63 is our number of observations) we don't have anymore predictors, which makes sense because we have no unique solution when p > n. I commented it out because the output shows all 2308 rows where everything after row 63 consists of NA values. Visualizing this is a bit difficult, but in short we don't really get a useful model from this.
+
+### Part (c)
+```{r}
+#solve(t(X) %*% X)
+```
+We get an error here(stopping it from knitting, that's why I commented it out) which indicates that our matrix is not invertible and/or we have linearly dependent columns, so we can't use it to get a regression model. We mentioned in class that we need our matrix to be full rank I believe? This is not since we have no unique solution because of the large p and smaller n.
+
+### Part (d)
+```{r}
+solve(t(X) %*% X + 17*diag(2308))[1:10, 1:10]
+```
+
+### Part (e)
+```{r}
+b_ridge <- (solve(t(X) %*% X + 17*diag(2308)) %*% t(X) %*% y)[1:10]; b_ridge
+```
+
+
+
+# Question 5
+
+## Solution.
+
+### Part (a)
+
+```{r}
+library(MASS)
+
+set.seed(10000)
+# proprtion divided into training and test sets
+fractionTraining <- 0.5
+fractionTesting <- 0.5
+
+# gather sample size for training and test sets
+nTraining <- floor(fractionTraining*nrow(Boston))
+nTest <- floor(fractionTesting*nrow(Boston))
+
+# find indices for training and test sets
+indicesTraining <- sort(sample(1:nrow(Boston),size=nTraining))
+indicesTesting <- setdiff(1:nrow(Boston), indicesTraining)
+
+# make training and testing data frames
+BostonTrain <- Boston[indicesTraining,]
+BostonTest <- Boston[indicesTesting,]
+
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration")
+```
+
+### Part (b)
+```{r}
+m1 <- lm(nox ~ dis, data=BostonTrain)
+
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration")
+abline(m1, col="blue")
+```
+
+### Part (c)
+I use 1 through 13 for my sequence because they cover the whole range of values in Boston$dis. 
+#### (i)
+```{r}
+m2 <- lm(nox ~ poly(dis,2), data=BostonTrain)
+
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration")
+
+xmesh <- seq(1,13, by=0.01)
+lines(xmesh, predict(m2, newdata=data.frame(dis=xmesh)), col="blue")
+
+#lines(sort(BostonTrain$dis), predict(m2, newdata=data.frame(dis=sort(BostonTrain$dis))), col="red")
+```
+#### (ii)
+```{r}
+m3 <- lm(nox ~ I(1/dis), data=BostonTrain)
+
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration")
+
+xmesh <- seq(1,13, by=0.01)
+lines(xmesh, predict(m3, newdata=data.frame(dis=xmesh)), col="blue")
+
+#lines(sort(BostonTrain$dis), predict(m3, newdata=data.frame(dis=sort(BostonTrain$dis))), col="red")
+```
+#### (iii)
+```{r}
+disDummy <- BostonTrain$dis >= 5
+BostonTrain$disDummy <- disDummy
+m4 <- lm(nox ~ dis + disDummy + dis*disDummy, data=BostonTrain)
+
+BostonTest$disDummy <- BostonTest$dis >= 5 # Maybe this is needed later?
+
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration", ylim=c(0.3,1))
+
+xmesh <- seq(1,13, by=0.01)
+lines(xmesh, predict(m4, newdata=data.frame(dis=xmesh, disDummy=(xmesh>=5))), col="blue", lwd=2)
+
+#lines(sort(BostonTrain$dis), predict(m4, newdata=data.frame(dis=sort(BostonTrain$dis))), col="red")
+```
+
+### Part (d)
+
+
+```{r}
+KNN <- function(x,K){
+  distance <- (x-BostonTrain$dis)^2
+  closest <- order(distance)[1:K]
+  yhat <- mean(BostonTrain$nox[closest])
+  return(yhat)
+}
+
+yhats <- 0
+for(i in 1:nrow(BostonTrain)){
+  yhats[i] <- KNN(BostonTrain$dis[i],5)
+}
+```
+
+The KNN function is created, then we get our predictions(called yhats) for each observation in our training set by passing one dis observation at a time to the function. distance is a list subtracting the argument we pass from each distance observation then squaring them. We then order this list and store the indices of the 5 smallest values as our "closest" variable. We then get our prediction(yhat) by averaging the nox values at those 5 closes values and store that as a value in our yhats list of predictions.
+
+### Part (e)
+```{r}
+# All of this can be done in part (d) to avoid going through this for loop all over again, but I went ahead and did it here.
+plot(BostonTrain$dis, BostonTrain$nox, xlab = "Distance to five employment centers", ylab = "Nitrogen Concentration")
+
+for(i in 1:nrow(BostonTrain)){
+  points(BostonTrain$dis[i], yhats[i], col="blue", pch = 0)
+}
+
+legend("topright", "Estimates", col="blue", pch = 0)
+```
+
+### Part (f)
+Yes, because if a value is even slightly below 5, we are just using m1, whereas if a value is even slightly above or equal to 5, we are using a different model entirely. Though the two values may be very close, our prediction of them with this model will vary around this point where dis=5. This is made evident just in the jump at dis=5 in the plot of our model. A jump like that in a model with continuous values is bad, because there should be no large difference from something like 4.99 to 5. 
+
+### Part (g)
+```{r}
+rss_m1 <- sum((predict(m1, newdata=data.frame(dis=BostonTest$dis)) - BostonTest$nox)^2); rss_m1
+rss_m2 <- sum((predict(m2, newdata=data.frame(dis=BostonTest$dis)) - BostonTest$nox)^2); rss_m2
+rss_m3 <- sum((predict(m3, newdata=data.frame(dis=BostonTest$dis)) - BostonTest$nox)^2); rss_m3
+rss_m4 <- sum((predict(m4, newdata=data.frame(dis=BostonTest$dis)) - BostonTest$nox)^2); rss_m4
+
+KNN <- function(x,K){
+  distance <- (x-BostonTrain$dis)^2
+  closest <- order(distance)[1:K]
+  yhat <- mean(BostonTrain$nox[closest])
+  return(yhat)
+}
+
+yhats_test <- 0
+for(i in 1:nrow(BostonTest)){
+  yhats_test[i] <- KNN(BostonTest$dis[i],5)
+}
+
+rss_m5 <- sum((yhats_test - BostonTest$nox)^2); rss_m5
+```
