@@ -1,0 +1,278 @@
+---
+title: "Coding Challenge 1"
+author: "Kevin Bailey, Yuying(Bella) Guan"
+date: "March 27, 2019"
+output: html_document
+---
+Loading libraries.
+```{r}
+library(boot)   # For CV
+library(leaps)  # For regsubsets()
+library(glmnet) # For Lasso
+library(splines)# For Splines
+library(fields) # For Thin-plate splines
+```
+Put the file location of your test set in the first line and uncomment it, and the training set that we used that you uploaded should be inside of the argument on the second line for data.
+```{r}
+test_data <- read.csv("D:/School/Cal Poly/S19/STA 5320/Coding Challenge/challenge1testing.csv") 
+#data <- read.csv("file:///home/kevin/School/Spring 2019/STA 5320/Coding Challenge/challenge1testing.csv")
+
+data <- read.csv("D:/School/Cal Poly/S19/STA 5320/Coding Challenge/challenge1testing.csv")
+
+data <- data[,-1] # X is just an observation number
+data$Quality <- as.factor(data$Quality)
+data$Style <- as.factor(data$Style)
+```
+
+### Function for Test RSS
+```{r}
+# Typical KNN function
+KNN <- function(x,K){
+  dist <- (x-data$Sqft)^2
+  closest <- order(dist)[1:K]
+  yhat <- mean(data$Price[closest])
+ 
+  return(yhat)
+}
+
+f <- function(test_set){
+  test_set <- test_set[,-1] # X is just an observation number
+  test_set$Quality <- as.factor(test_set$Quality)
+  test_set$Style <- as.factor(test_set$Style)
+  
+  sDummy <- test_set$Style == 7
+  test_set$sDummy <- sDummy
+  
+  qDummy <- test_set$Quality == 2
+  test_set$qDummy <- qDummy
+  
+  # -----  Model 1  ----- #
+  y <- test_set$Price
+  yhat <- predict(backward_model, newdata=test_set)
+  loocv <- cv.glm(test_set, backward_model)$delta[1]
+  
+  cat("-----  Model 1  ----- \n")
+  cat("sqrt(LOOCV): ", sqrt(loocv), "\n")
+  cat("      LOOCV: ", loocv, "\n\n")
+  
+  cat("  sqrt(RSS): ", sqrt(sum((y - yhat)^2)), "\n") # sqrt(RSS)
+  cat("        RSS: ", sum((y-yhat)^2), "\n\n")
+  # cat("  sqrt(MSE): ", sqrt(sum((y - yhat)^2)/nrow(test_set)), "\n") # sqrt(MSE)
+  
+  # ----- "Model" 2  ----- #
+  yhats <- 0
+  
+  for(i in 1:nrow(test_set)){
+    yhats[i] <- KNN(test_set$Sqft[i],2) 
+  }
+  
+  cat("----- \"Model\" 2 ----- \n")
+  cat("  sqrt(RSS): ", sqrt(sum((y-yhats)^2)), "\n") # sqrt(RSS), just easier to compare
+  cat("        RSS: ", sum((y-yhats)^2))
+}
+```
+
+### Model 1
+```{r}
+sDummy <- data$Style == 7
+data$sDummy <- sDummy
+
+qDummy <- data$Quality == 2
+data$qDummy <- qDummy
+
+backward_model <- glm(Price ~ Sqft + Quality + Lot + Sqft:Bed + Sqft:Year + Year:sDummy + Bath:qDummy, data=data)
+
+summary(backward_model)
+#par(mfrow=c(2,2))
+#plot(backward_model)
+
+# change data to test_set
+cat("sqrt(LOOCV): ", sqrt(cv.glm(data, backward_model)$delta[1]))
+
+y <- data$Price # Change data to test_set
+yhat <- predict(backward_model, newdata=data) # Replace data with test_set
+sqrt(sum((y - yhat)^2)) # sqrt(RSS)
+
+# Replace data with test_set
+sqrt(sum((y - yhat)^2)/nrow(data)) # Dividing by observations to get MSE, more comparable for LOOCV.
+```
+
+We ended up choosing the model with interaction terms from Backward Selection, with the predictors as stated above. We tried many different linear models, including Best Subset Selection without interaction terms(and tried it with interaction terms, but it wouldn't finish running), linear models with all predictors, Lasso and Ridge both with/without interaction terms, Forward Selection with interaction terms, and more that weren't detailed here. We did not use any polynomial terms as the residuals showed only a slight funnel, addressed in the next paragraph, but the QQ-Plot wasn't exactly perfect although it was not the worst. This model also had the best AIC/BIC, and although the Adjusted $R^2$ for every model isn't amazing, this model seemed to come out on top in all of the areas mentioned. 
+
+The Lasso model without interaction terms was a close second choice, but the LOOCV was convincing enough for the backward selection model to abandon the Lasso one. We did also try to take a log transform because of the slight funnel shape in the residuals, but it didn't seem to do much so we opted out of it in favor of not doing things incorrectly.  
+
+### Model 2
+```{r}
+KNN <- function(x,K){
+  dist <- (x-data$Sqft)^2
+  closest <- order(dist)[1:K]
+  yhat <- mean(data$Price[closest])
+  return(yhat)
+}
+yhats <- 0
+  
+# Change both instances of data to test_set for the for loop.
+for(i in 1:nrow(data)){
+  yhats[i] <- KNN(data$Sqft[i],2) 
+}
+
+# plot(data$Sqft,data$Price)
+# points(data$Sqft,yhats,col="blue")
+
+y <- data$Price # Change data here to test_set
+sqrt(sum((y-yhats)^2)) # sqrt(RSS), just easier to compare
+```
+For the nonparametric methods, we decided on KNN with K=2 and Sqft as our one predictor, as it resulted in the lowest RSS. We looked at using other predictors such Lot, Bath, Bed, Quality, etc. but Sqft had the lowest RSS by a good margin. With regards to Splines vs KNN, we did similar for Splines but saw the best results when still with KNN and K=2, no matter the predictor(comparing to Sqft for KNN). 
+
+Thin Plate Splines were considered but since we could only use one predictor, it didn't really do much for us. We also looked at transforming the data but again the results were not the best and we had extra room for error in doing the transform and exponentiating it back. We didn't want to risk it as our KNN RSS seemed decent as it is. Sorry. :(
+
+```{r}
+f(test_data)
+```
+
+### Some work for Model 1
+
+Best Subset Selection:
+```{r}
+m1 <- regsubsets(Price ~ ., data=data, nvmax=17) # BSS. 
+summary(m1) # Seeing which variables are best. 
+
+which(summary(m1)$bic == min(summary(m1)$bic)) # Shows 6 predictor model, bic = -222.6373
+which(summary(m1)$adjr2 == max(summary(m1)$adjr2)) # Shows 11 predictor model, adjr2 = 0.788
+
+par(mfrow = c(1,2))
+plot(summary(m1)$bic, ylab="BIC")
+plot(summary(m1)$adjr2, ylab="Adj R-Squared")
+
+# The plots above show that the adjusted R-squared doesn't really increase much even after 6 predictors. 
+# However, after 6 predictors for BIC, 11 predictors is a decent jump up. So I think we should look at the 6 predictor model.
+coef(m1, 6) 
+
+# Including the dummy variable only slightly improved the model. 
+bss_model <- glm(Price ~ Sqft + Year + Quality + sDummy + Lot, data=data) # Using glm for CV later.
+par(mfrow=c(1,1))
+plot(bss_model) # Everything looks okay aside from the QQ-Plot. May not need polynomial terms.
+sqrt(cv.glm(data, bss_model)$delta[1]) 
+
+summary(bss_model)
+```
+
+Lasso and Ridge:
+```{r}
+x_mat <- model.matrix(Price ~ ., data=data)[,-1] # Don't want intercept?
+
+lasso.model <- cv.glmnet(x_mat, data$Price, alpha=1) # alpha=1 for lasso, 0 for ridge.
+predict(glmnet(x_mat, data$Price, alpha=1), s=lasso.model$lambda.min, type="coefficients")
+
+ridge.model <- cv.glmnet(x_mat, data$Price, alpha=0)
+predict(glmnet(x_mat, data$Price, alpha=0), s=ridge.model$lambda.min, type="coefficients")
+
+sqrt(lasso.model$cvm[which.min(lasso.model$lambda)])
+sqrt(ridge.model$cvm[which.min(ridge.model$lambda)])
+
+x_mat_2 <- model.matrix(Price ~ .*., data=data)[,-1]
+
+lasso.model2 <- cv.glmnet(x_mat_2, data$Price, alpha=1)
+predict(glmnet(x_mat_2, data$Price, alpha=1), s=lasso.model2$lambda.min, type="coefficients")
+
+ridge.model2 <- cv.glmnet(x_mat_2, data$Price, alpha=0)
+predict(glmnet(x_mat_2, data$Price, alpha=0), s=ridge.model2$lambda.min, type="coefficients")
+
+which(lasso.model2$lambda == lasso.model2$lambda.min) 
+sqrt(lasso.model2$cvm[which.min(lasso.model2$lambda)]) # sqrt of it gives about 90.5k
+
+which(ridge.model2$lambda == ridge.model2$lambda.min)
+sqrt(ridge.model2$cvm[which.min(ridge.model2$lambda)])
+```
+
+Best Subset Selection with interaction terms.
+```{r}
+forward <- regsubsets(Price ~ .*., data=data, method="forward", nvmax=30)
+backward <- regsubsets(Price ~ .*., data=data, method="backward", nvmax=30)
+
+which(summary(forward)$bic == min(summary(forward)$bic)) # 9 predictor model, bic = -232.44
+which(summary(forward)$adjr2 == max(summary(forward)$adjr2)) # 28 predictors, adjr2 = 0.8392
+
+which(summary(backward)$bic == min(summary(backward)$bic)) # 8 predictor model, bic = -239.795, seems promising. 
+which(summary(forward)$adjr2 == max(summary(forward)$adjr2)) # 28 predictors, ajdr2 = 0.8392
+
+plot(summary(forward)$bic, ylab="BIC")
+plot(summary(forward)$adjr2, ylab="Adj R-Squared")
+
+plot(summary(backward)$bic, ylab="BIC")
+plot(summary(backward)$adjr2, ylab="Adj R-Squared")
+```
+
+
+
+### Some work for Model 2
+#### KNN with log transformation
+```{r}
+z <- log(data$Price)
+KNN <- function(x,K){
+  dist <- (x-data$Sqft)^2
+  closest <- order(dist)[1:K]
+  zhat <- mean(z[closest])
+  return(zhat)
+}
+  zhats <- 0
+  for(i in 1:nrow(data)){
+    zhats[i] <- KNN(data$Sqft[i],2)  
+    
+  }
+yhats <- exp(zhats)
+plot(data$Sqft,data$Price)
+points(data$Sqft,yhats,col="blue")
+y<-data$Price
+RSS <- sum((y-yhats)^2); sqrt(RSS)
+
+```
+#### KNN with sqrt transformation
+```{r}
+z2 <- sqrt((data$Price))
+KNN <- function(x,K){
+  dist <- (x-data$Sqft)^2
+  closest <- order(dist)[1:K]
+  zhat <- mean(z2[closest])
+  return(zhat)
+}
+
+zhats2 <- 0
+for(i in 1:nrow(data)){
+  zhats2[i] <- KNN(data$Sqft[i],2)  
+}
+
+yhats <- sqrt(zhats)
+plot(data$Sqft,data$Price)
+points(data$Sqft,yhats,col="blue")
+y<-data$Price
+RSS <- sum((y-yhats)^2); sqrt(RSS) #3.035712e+13
+```
+
+#### Splines for Price and Sqft
+```{r}
+y <- data$Price
+x <- data$Sqft
+plot(x,y)
+Sqft_limts<- range(data$Sqft)
+#xmesh <- seq(from=Sqft_limts[1],to=Sqft_limts[2])
+fit <- smooth.spline(x,y,cv=T)
+yhat <- predict(fit, x)$y
+
+#lines(xmesh,yhat)
+RSS <- sum((y-yhat)^2); sqrt(RSS)
+
+#Thin plate spline
+x <- data$Sqft
+y<- data$Price
+
+fit <- Tps(x,y)
+yhat <- predict(fit)
+RSS <- sum((y-yhat)^2); sqrt(RSS) #1.978092e+12
+```
+
+```{r}
+bs_fit <- lm(Price ~ bs(Sqft), data=data)
+yhat <- predict(bs_fit, newdata=data.frame(Sqft=data$Sqft))
+sqrt(sum((y - yhat)^2))/13
+```

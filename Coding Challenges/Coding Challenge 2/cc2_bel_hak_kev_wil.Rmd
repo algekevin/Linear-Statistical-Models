@@ -1,0 +1,200 @@
+---
+title: "Coding Challenge 2"
+output: html_document
+---
+
+```{r}
+library(boot)   # For CV
+library(leaps)  # For regsubsets()
+library(glmnet) # For Lasso
+library(splines)# For Splines
+library(fields) # For Thin-plate splines
+library(DiceKriging) # For GPs
+
+#data <- read.csv("file:///D:/School/Cal Poly/S19/STA 5320/Coding Challenge/Coding Challenge 2/ozoneTrain.csv")
+data <- read.csv("~/School/Spring 2019/STA 5320/Coding Challenge/Coding Challenge 2/ozoneTrain.csv")
+
+# ----- For test set stuff ----- #
+library(ElemStatLearn)
+ind <- data$X
+dataTe <- ozone[-ind, ]
+dataTe2 <- dataTe[-56,] # Just to make same length
+# ----- ------------------ ----- #
+
+data <- data[,-1]
+```
+
+Regression Stuff
+```{r}
+m1 <- lm(ozone ~ ., data=data) # Pretty bad Adj. R-Squared. Radiation maybe not entirely significant. Intercept is trash too.
+summary(m1)
+
+m2 <- lm(ozone ~ . -radiation -1, data=data) # Adj. R-Squared = 0.8459, not bad.
+summary(m2)
+
+m3 <- glm(ozone ~ . -radiation -1 + I(temperature^2) + I(1/wind), data=data) # 0.8638, not big improvement.
+summary(m3)
+
+m4 <- regsubsets(ozone ~ .*., data=data, nvmax=30) # Best subset
+which.min(summary(m4)$bic)
+summary(m4)
+
+m5 <- regsubsets(ozone ~ .*.*., data=data, nvmax=30)
+which.min(summary(m5)$bic)
+m5 <- glm(ozone ~ radiation + radiation:temperature + radiation:temperature:wind + I(1/wind) + I(temperature^2), data=data)
+AIC(m5) # Removing intercept makes it a bit worse. 
+
+bss.model <- glm(ozone ~ radiation:temperature + radiation:wind + I(1/wind) + I(temperature^2), data=data)
+summary(bss.model) # 0.8768
+sum((dataTe2$ozone - predict(bss.model, newdata=dataTe2))^2) # 15558.02
+AIC(bss.model) # These two are very close, BIC says bss.model is better though. A bit better with the interaction term.
+AIC(m3)
+
+cv.glm(data, bss.model)$delta[1] # 551.0854 Choose this model basically.
+cv.glm(data, m3)$delta[1] # 642.6525
+
+# What if we transform the data. Likely doing stuff wrong. 
+l.data <- data
+l.data[,1] <- log(data[,1])
+
+l.bss <- glm(ozone ~ radiation:temperature + radiation:wind - 1 + I(1/wind) + I(temperature^2), data=l.data)
+exp(cv.glm(l.data, l.bss)$delta[1]) # Probably not right.
+
+l.m1 <- glm(ozone ~ ., data=l.data)
+summary(l.m1) # AIC 94.074, 92.743 without intercept
+sum((dataTe2$ozone - exp(predict(l.m1, newdata=dataTe2)))^2) # 12706, or 12887 without intercept(its not sig)
+
+l.m2 <- regsubsets(ozone ~ .*., data=l.data, nvmax=30) # Best subset
+which.min(summary(l.m2)$bic)
+summary(l.m2)
+l.m2 <- glm(ozone ~ radiation + temperature + radiation:wind, data=l.data)
+summary(l.m2) # AIC 92.631
+sum((dataTe2$ozone - exp(predict(l.m2, newdata=dataTe2)))^2) # 14049
+
+l.m3 <- regsubsets(ozone ~ .*.*., data=l.data, nvmax=30) # Best subset
+which.min(summary(l.m3)$bic)
+summary(l.m3)
+l.m3 <- glm(ozone ~ radiation + temperature + radiation:wind:temperature, data=l.data)
+summary(l.m3) # AIC 91.911
+sum((dataTe2$ozone - exp(predict(l.m3, newdata=dataTe2)))^2) # 13850
+cv.glm(data, l.m3)$delta[1]
+
+sum((dataTe2$ozone - predict(bss.model, newdata=dataTe2))^2) # 15558
+sum((dataTe2$ozone - exp(predict(l.bss, newdata=dataTe2)))^2) # 15546
+```
+
+Lasso/Ridge
+```{r}
+x_mat <- model.matrix(ozone ~ ., data=data)[,-1] # Don't want intercept?
+
+lasso.model <- cv.glmnet(x_mat, data$ozone, alpha=1) # alpha=1 for lasso, 0 for ridge.
+predict(glmnet(x_mat, data$ozone, alpha=1), s=lasso.model$lambda.min, type="coefficients")
+
+ridge.model <- cv.glmnet(x_mat, data$ozone, alpha=0)
+predict(glmnet(x_mat, data$ozone, alpha=0), s=ridge.model$lambda.min, type="coefficients")
+
+lasso.model$cvm[which.min(lasso.model$lambda)]
+ridge.model$cvm[which.min(ridge.model$lambda)]
+
+x_mat_2 <- model.matrix(ozone ~ .*., data=data)[,-1]
+
+lasso.model2 <- cv.glmnet(x_mat_2, data$ozone, alpha=1)
+predict(glmnet(x_mat_2, data$ozone, alpha=1), s=lasso.model2$lambda.min, type="coefficients")
+
+ridge.model2 <- cv.glmnet(x_mat_2, data$ozone, alpha=0)
+predict(glmnet(x_mat_2, data$ozone, alpha=0), s=ridge.model2$lambda.min, type="coefficients")
+
+which(lasso.model2$lambda == lasso.model2$lambda.min) 
+lasso.model2$cvm[which.min(lasso.model2$lambda)]
+
+which(ridge.model2$lambda == ridge.model2$lambda.min)
+ridge.model2$cvm[which.min(ridge.model2$lambda)] # Best mean CV error.
+```
+
+GPs
+```{r}
+gp1 <- km(~1, design = data[,-1], response=data$ozone, nugget.estim = T)
+pred1 <- predict(gp1, newdata=data[,-1], type="UK")
+sum((pred1$mean-dataTe2$ozone)^2) # Soooooo small.
+
+gp2 <- km(~., design=data[,-1], response=data$ozone, nugget.estim=T)
+pred2 <- predict(gp2, newdata=data[,-1], type="UK")
+sum((pred2$mean-dataTe2$ozone)^2) # Not quite as small as the one above.
+
+gp3 <- km(~I(1/wind) + I(temperature^2), design=data[,-1], response=data$ozone, nugget.estim=T)
+pred3 <- predict(gp3, newdata=data[,-1], type="UK")
+sum((pred3$mean-dataTe2$ozone)^2) # Even smaller.
+
+gp4 <- km(~I(1/wind) + I(temperature^2) + radiation:temperature + radiation:wind, design=data[,-1], response=data$ozone, nugget.estim=T)
+pred4 <- predict(gp4, newdata=data[,-1], type="UK")
+sum((pred4$mean-dataTe2$ozone)^2) # Smallest so far, but not sure if using trend functions correctly. 
+
+gp5 <- km(~1, design = data[,-1], response=l.data$ozone, nugget.estim=TRUE)    
+pred5 <- predict(gp5, newdata=dataTe2[,-1], type="UK")
+yhat5 <- pred5$mean
+y <- dataTe2$ozone
+sum((y-exp(yhat1))^2) # 12574.75
+
+l10.data <- data
+l10.data$ozone <- log10(l10.data$ozone)
+
+gp6 <- km(~1, design=data[,-1], response=l10.data$ozone, nugget.estim=TRUE)
+pred6 <- predict(gp6, newdata=dataTe2[,-1], type="UK")
+yhat6 <- pred6$mean
+y <- dataTe2$ozone
+sum((y-(10^yhat6))^2) # 12574.75
+
+sq.data <- data
+sq.data$ozone <- sqrt(data$ozone)
+
+gp7 <- km(~1, design=data[,-1], response=sq.data$ozone, nugget.estim=T)
+pred7 <- predict(gp7, newdata=dataTe2[,-1], type="UK")
+yhat7 <- pred7$mean
+y <- dataTe2$ozone
+sum((y-(yhat7^2))^2) # Not worth looking at.
+```
+
+Splines
+```{r}
+sp1 <- smooth.spline(data$wind, data$ozone, cv=T)
+sp2 <- smooth.spline(data$temperature, data$ozone, cv=T)
+sp3 <- smooth.spline(data$radiation, data$ozone, cv=T)
+
+sum((data$ozone - predict(sp1, dataTe2$wind)$y)^2) # 30,826, 118389 for testRSS.
+sum((data$ozone - predict(sp1, dataTe2$temperature)$y)^2)
+sum((data$ozone - predict(sp1, dataTe2$radiation)$y)^2)
+```
+
+TestRSS function
+```{r}
+f <- function(test_set){
+  test_set <- test_set[,-1] # X is just an observation number
+
+  # -----  Model 1  ----- #
+  pred <- predict(gp, newdata=test_set, type="UK")
+  yhat <- pred$mean
+  y <- test_set$ozone
+  
+  cat("-----  Model 1  ----- \n")
+  cat("        RSS: ", sum((y-exp(yhat))^2), "\n\n")
+}
+```
+
+The data and model: "data" is for training set, "test_data" is for test set.
+```{r}
+library(DiceKriging) # For GPs
+
+# Put your own file location here for the training set.
+data <- read.csv("~/School/Spring 2019/STA 5320/Coding Challenge/Coding Challenge 2/ozoneTrain.csv")
+
+# Put test set in here.
+test_data <- read.csv(...)
+
+data <- data[,-1] # X is an obs num
+l.data <- data
+l.data$ozone <- log(data$ozone)
+
+
+gp <- km(~1, design = data[,-1], response=l.data$ozone, nugget.estim=TRUE)
+f(test_data)
+```

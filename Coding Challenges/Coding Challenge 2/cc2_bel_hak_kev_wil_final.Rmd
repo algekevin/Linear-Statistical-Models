@@ -1,0 +1,52 @@
+---
+title: "Coding Challenge 2"
+output: html_document
+---
+
+TestRSS function
+```{r}
+f <- function(test_set){
+  #test_set <- test_set[,-1] # X is just an observation number
+
+  # -----  Model 1  ----- #
+  pred <- predict(gp, newdata=test_set[,-1], type="UK")
+  yhat <- pred$mean
+  y <- test_set$ozone
+  
+  cat("-----  Model 1  ----- \n")
+  cat("        RSS: ", sum((y-exp(yhat))^2), "\n\n")
+}
+```
+
+The data and model: "data" is for training set, "test_data" is for test set.
+```{r}
+library(DiceKriging) # For GPs
+
+# Put your own file location here for the training set.
+data <- read.csv("~/School/Spring 2019/STA 5320/Coding Challenge/Coding Challenge 2/ozoneTrain.csv")
+
+# Put test set in here.
+test_data <- read.csv("...")
+
+data <- data[,-1] # X is an obs num
+l.data <- data
+l.data$ozone <- log(data$ozone)
+
+gp <- km(~1, design = data[,-1], response=l.data$ozone, nugget.estim=TRUE)
+```
+
+And this is to call the function to print the RSS.
+```{r}
+f(test_data)
+```
+
+####Write-up: 
+
+We went through quite a lot of models to get to this point. We started with a regression with all predictors, and then removing the intercept as well as radiation as they were not significant. Then, from noticing the correlation in the plot of the data, we added in $temperature^2$ as well as $\dfrac{1}{wind}$ to our models. Then, after going through best subset selection with interaction terms, we found the minimum BIC to be when we used 3 predictors, which were radiation, radiation:wind, and radiation:wind:temperature, while throwing in the square and fraction like mentioned above. This model was good, but actually the two interaction terms model with the square and inverse terms added above was slightly better with a lower AIC, higher adjusted $R^2$, and a substantially lower LOOCV as well(551 vs 642). 
+
+After this, we went through the same process but with a log transform on the data since the QQ-Plot didn't look so hot. The correlation of temperature looking squared with relation to ozone and wind having an inverse shape were no longer there, and they all looked more linear. The best model to come from the transform was actually the one with all predictors. The AIC was only slightly higher than our second choice(radiation + temperature + radiation:temperature:wind), but the LOOCV won out, and the two were so close we opted for the one without interaction terms. This model was our best so far by a decent amount, assuming we did all the exponentiating correctly to undo the transform. 
+Next, we tried some of the other methods such as splines, ridge/lasso, KNN. We used a different smoothing spline for each predictor chosen through cross-validation, and none of these looked promising. Going through ridge/lasso, however, we found that Ridge with two-way interaction terms was not too bad. Unfortunately, it was a bit off from our log model. KNN was also done, and both K=2 as well as K=5 had decent results, but when splitting the data 50/50 to get the testRSS, the log model was still the best. 
+
+As a last resort, we decided to mess around with Gaussian Processes a bit even though we weren't entirely familiar with how to modify some of the arguments. We tried about 5 different GPs total, and the best one came out to be based on the log-transformed data as well. We used all predictors and used an intercept only trend function. The testRSS we had here was actually really close with our log model(and a slight improvement over it), but we are kinda hoping/assuming that this one will be a bit better on a real test set, though we think the two will still be close. 
+
+Ultimately, we chose the Gaussian Process using all predictors with the log-transformed data and the intercept only trend function.
