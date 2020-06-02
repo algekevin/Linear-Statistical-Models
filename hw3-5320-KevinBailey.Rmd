@@ -1,0 +1,128 @@
+---
+title: "STA 5320 Homework 3"
+author: "Kevin Bailey"
+date: "2/12/19"
+output: html_document
+---
+
+# Question 2
+
+## Solution.
+
+### Part (a)
+
+```{r}
+library(ElemStatLearn)
+head(prostate)
+trainingIndices <- which(prostate$train==TRUE)
+prostateTrain <- prostate[trainingIndices,]
+prostateTrain <- prostateTrain[,names(prostateTrain) != "train"]
+```
+
+*Line 1*: Loads the library needed for this problem.
+*Line 2*: Prints the first 6 rows of the prostate dataset. 
+*Line 3*: Takes the indices(rows) where the train column of the prostate data set is "TRUE" and assigns them to trainingIndices.
+*Line 4*: Takes all the data from the prostate data set where the train column is "TRUE"(as indicated by trainingIndices) and assigns that data to a new data set called prostateTrain. 
+*Line 5*:  Just one of the ways to remove the train column from the training set. 
+
+### Part (b)
+
+```{r}
+m1 <- lm(lpsa ~ lcavol + lweight, data=prostateTrain)
+m2 <- lm(lpsa ~ ., data = prostateTrain)
+
+summary(m1)
+summary(m2)
+```
+
+
+### Part (c)
+
+```{r}
+print(rss1 <- sum(resid(m1)^2)) # Just using print to show their values without an extra line.
+print(rss2 <- sum(resid(m2)^2))
+```
+
+### Part (d)
+
+```{r}
+Fstat <- ((rss1 - rss2)/6) / (rss2/(nrow(prostateTrain)-9))
+```
+
+### Part (e)
+
+```{r}
+df1 <- nrow(prostateTrain) - 8
+df2 <- 5
+pf(Fstat, df1, df2, lower.tail=F)
+```
+
+We would fail to reject $H_0$, meaning we don't think there are any other significant predictors. This part worries me a bit because just doing summary of m2 it looks like there are two more predictors which might be significant.
+
+### Part (f)
+
+```{r}
+ageDummy <- prostateTrain$age >= 62
+prostateTrain$ageDummy <- ageDummy
+```
+
+*Line 1*: Gives us a list of which rows have an age >= 62 in our training set.
+*Line 2*: Creates a column in our training set representing whether or not each row's age is >= 62. 
+
+
+### Part (g)
+
+```{r}
+m3 <- lm(lpsa ~ lcavol + lweight + ageDummy, data = prostateTrain)
+m4 <- lm(lpsa ~ lcavol + lweight + ageDummy + lcavol*ageDummy, data=prostateTrain)
+summary(m3)
+summary(m4)
+```
+$\beta_9$ does not seem significant, but $\beta_{10}$ is barely significant. 
+
+### Part (h)
+I want to say either m1 or m4 assuming I did everything correctly. m2 is using all predictors and half of them are insignificant. m1 has very significant predictors, and m4 has the same as m1 but with the interaction term between $x_{i1}$ and $x_{i9}$, which is barely significant at a 95% confidence level. 
+
+
+# Question 3
+
+## Solution.
+
+### Part (a)
+
+```{r}
+testIndices <- which(!prostate$train)
+prostateTest <- prostate[testIndices, 1:ncol(prostate)-1]
+prostateTest$ageDummy <- prostateTest$age >= 62
+intersect(prostateTest, prostateTrain) # Checking for no overlap.
+```
+
+
+### Part (b)
+
+```{r}
+predictors <- data.frame(lcavol = prostateTest$lcavol, 
+                         lweight = prostateTest$lweight)
+rss_t1 <- sum((predict.lm(m1, newdata=predictors)-prostateTest$lpsa)^2)
+
+rss_t2 <- sum((predict.lm(m2, newdata=within(prostateTest, rm(lpsa)))-prostateTest$lpsa)^2)
+
+predictors <- data.frame(lcavol = prostateTest$lcavol,
+                         lweight = prostateTest$lweight,
+                         ageDummy = prostateTest$ageDummy)
+rss_t3 <- sum((predict.lm(m3, newdata=predictors)-prostateTest$lpsa)^2)
+
+predictors <- data.frame(lcavol = prostateTest$lcavol,
+                         lweight = prostateTest$lweight,
+                         ageDummy = prostateTest$ageDummy,
+                         inter_terms = prostateTest$lcavol * prostateTest$ageDummy)
+rss_t4 <- sum((predict.lm(m4, newdata=predictors)-prostateTest$lpsa)^2)
+
+cat(rss_t1, rss_t2, rss_t3, rss_t4)
+```
+
+### Part (c)
+Model 3 seems to have the lowest $RSS_{test}$ assuming I did everything right above.
+
+### Part (d)
+Not really, I wouldn't be surprised if I did something wrong but the $RSS_{test}$ for model 4 here is the highest, but that model seemed best to me based on the hypothesis testing. Need to ask about lots of things here.
