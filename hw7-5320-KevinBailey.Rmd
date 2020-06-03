@@ -1,0 +1,36 @@
+---
+title: "STA 5320 Homework 7"
+author: "Kevin Bailey"
+date: "2/12/19"
+output: html_document
+---
+
+# Question 5
+
+### Part (a)
+```{r}
+LOOCV <- function(fit){
+  xTrain <- fit$model
+  yTrain <- fit$fitted.values + fit$residuals
+  n <- nrow(xTrain)
+  
+  err <- 0 # Had to add this in the code, otherwise err doesn't exist outside of the for loop.
+  for(i in 1:n){
+    xLOOCV <- xTrain[i,]
+    yLOOCV <- yTrain[i]
+    fitLOOCV <- lm(fit$call$formula, data=xTrain[-i,])
+    yhat <- predict(fitLOOCV, newdata=xLOOCV)
+    err[i] <- (yLOOCV - yhat)^2
+  }
+  
+  return(mean(err))
+}
+
+```
+
+### Part (b)
+```{r}
+library(MASS)
+m16 <- lm(crim ~ rad + dis + zn + black, data=Boston)
+LOOCV(m16)
+```
