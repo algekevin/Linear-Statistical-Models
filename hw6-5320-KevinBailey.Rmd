@@ -1,0 +1,160 @@
+---
+title: "hw6-5320-Kevinbailey"
+author: "Kevin Bailey"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r}
+library(ElemStatLearn)
+```
+
+# Question 4
+
+### Part (a)
+Assuming you want us to use the same data, seed, etc from the 3-4-19 lab?
+```{r}
+set.seed(27)
+propTraining <- 0.7
+propTesting <- 0.3
+
+nTraining <- floor(propTraining*nrow(bone))
+nTest <- floor(propTesting*nrow(bone))
+
+indicesTraining <- sort(sample(1:nrow(bone), size=nTraining))
+indicesTesting <- setdiff(1:nrow(bone), indicesTraining)
+
+boneTrain <- bone[indicesTraining,]
+boneTest <- bone[indicesTesting,]
+
+m1 <- lm(spnbmd~age,data=boneTrain)
+m2 <- lm(spnbmd~I(1/age),data=boneTrain)
+m3 <- lm(spnbmd~I(1/age)*gender,data=boneTrain)
+
+# "m4" kinda
+nearestKaverage <- function(x0,K){
+  dist <- abs(boneTrain$age-x0)
+  smallestDist <- order(dist)[1:K] 
+  yhat <- mean(boneTrain$spnbmd[smallestDist])
+  return(yhat)
+}
+#nearestKaverage(30,5)
+
+yhat1males <- predict(m1, newdata=boneTest[which(boneTest$gender == "male"),])
+yhat2males <- predict(m2, newdata=boneTest[which(boneTest$gender == "male"),])
+yhat3males <- predict(m3, newdata=boneTest[which(boneTest$gender == "male"),])
+
+yhat4males <- 0
+for(i in 1:nrow(boneTest[which(boneTest$gender == "male"),])){
+  x0 <- boneTest[which(boneTest$gender == "male"),]$age[i]
+  yhat4males[i] <- nearestKaverage(x0,10)
+}
+
+tRSS_males1 <- sum((boneTest[which(boneTest$gender == "male"),]$spnbmd-yhat1males)^2); tRSS_males1
+tRSS_males2 <- sum((boneTest[which(boneTest$gender == "male"),]$spnbmd-yhat2males)^2); tRSS_males2
+tRSS_males3 <- sum((boneTest[which(boneTest$gender == "male"),]$spnbmd-yhat3males)^2); tRSS_males3
+tRSS_males4 <- sum((boneTest[which(boneTest$gender == "male"),]$spnbmd-yhat4males)^2); tRSS_males4
+```
+
+### Part (b)
+Okay, I'll use the variable for which(...) now because it got a bit ugly at the end...
+
+```{r}
+females <- which(boneTest$gender == "female")
+boneTestF <- boneTest[females,]
+yhat1females <- predict(m1, newdata=boneTestF)
+yhat2females <- predict(m2, newdata=boneTestF)
+yhat3females <- predict(m3, newdata=boneTestF)
+
+yhat4females <- 0
+for(i in 1:nrow(boneTestF)){
+  x0 <- boneTestF$age[i]
+  yhat4females[i] <- nearestKaverage(x0,10)
+}
+
+tRSS_females1 <- sum((boneTestF$spnbmd-yhat1females)^2); tRSS_females1
+tRSS_females2 <- sum((boneTestF$spnbmd-yhat2females)^2); tRSS_females2
+tRSS_females3 <- sum((boneTestF$spnbmd-yhat3females)^2); tRSS_females3
+tRSS_females4 <- sum((boneTestF$spnbmd-yhat4females)^2); tRSS_females4
+```
+
+### Part (c)
+```{r}
+# First, need to actually get the test RSS in general.
+yhat1 <- predict(m1,newdata=boneTest)
+yhat2 <- predict(m2,newdata=boneTest)
+yhat3 <- predict(m3,newdata=boneTest)
+
+yhat4 <- 0
+for(i in 1:nrow(boneTest)){
+  x0 <- boneTest$age[i]
+  yhat4[i] <- nearestKaverage(x0,10)
+}
+
+
+RSS1 <- sum((boneTest$spnbmd-yhat1)^2); RSS1
+RSS2 <- sum((boneTest$spnbmd-yhat2)^2); RSS2
+RSS3 <- sum((boneTest$spnbmd-yhat3)^2); RSS3
+RSS4 <- sum((boneTest$spnbmd-yhat4)^2); RSS4
+```
+
+Lowest TestRSS: m4
+
+Lowest TestRSS for males: m4
+
+Lowest TestRSS for females: m3
+
+### Part (d)
+```{r}
+par(mfrow=c(1,2)) # Using (1,2) because (2,1) looks nasty for this. 
+
+plot(bone$age[which(bone$gender=="male")],
+     bone$spnbmd[which(bone$gender=="male")], 
+     xlab="Age", ylab="spnbmd", main="Males")
+
+xmesh <- seq(0, 30, by=0.01)
+
+yhat1mesh <- predict(m1, newdata=data.frame(age=xmesh, gender="male"))
+lines(xmesh, yhat1mesh, col=2, lwd=2)
+
+yhat2mesh <- predict(m2, newdata=data.frame(age=xmesh, gender="male"))
+lines(xmesh, yhat2mesh, col=3, lwd=2)
+
+yhat3mesh <- predict(m3, newdata=data.frame(age=xmesh, gender="male"))
+lines(xmesh, yhat3mesh, col=4, lwd=2)
+
+yhat4mesh <- 0
+for(i in 1:length(xmesh)){
+  x0 <- xmesh[i]
+  yhat4mesh[i] <- nearestKaverage(x0, 10)
+}
+lines(xmesh, yhat4mesh, col=5, lwd=2)
+
+legend("topright", c("m1", "m2", "m3", "m4"), col=c(2, 3, 4, 5), lty=c(1, 1, 1, 1))
+
+
+
+females <- which(bone$gender == "female")
+
+plot(bone$age[females], bone$spnbmd[females],
+     xlab="Age", ylab="spnbmd", main="Females")
+
+yhat1mesh <- predict(m1, newdata=data.frame(age=xmesh, gender="female"))
+lines(xmesh, yhat1mesh, col=2)
+
+yhat2mesh <- predict(m2, newdata=data.frame(age=xmesh, gender="female"))
+lines(xmesh, yhat2mesh, col=3)
+
+yhat3mesh <- predict(m3, newdata=data.frame(age=xmesh, gender="female"))
+lines(xmesh, yhat3mesh, col=4)
+
+yhat4mesh <- 0
+for(i in 1:length(xmesh)){
+  x0 <- xmesh[i]
+  yhat4mesh[i] <- nearestKaverage(x0, 10)
+}
+lines(xmesh, yhat4mesh, col=5)
+
+legend("topright", c("m1", "m2", "m3", "m4"), col=c(2, 3, 4, 5), lty=c(1, 1, 1, 1))
+```
