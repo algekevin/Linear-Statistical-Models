@@ -1,0 +1,54 @@
+---
+title: "STA 5320 Homework 9"
+author: "Kevin Bailey"
+date: "April 12, 2019"
+output: html_document
+---
+
+#### Question 4
+```{r}
+library(MASS)
+library(splines)
+library(glmnet)
+library(fields)
+
+set.seed(583)
+
+propTraining <- 0.5
+propTesting <- 0.5
+
+nTraining <- floor(propTraining*nrow(Boston))
+nTest <- floor(propTesting*nrow(Boston))
+
+# find indices for training and test sets
+indicesTraining <- sort(sample(1:nrow(Boston),size=nTraining))
+indicesTesting <- setdiff(1:nrow(Boston), indicesTraining)
+
+# make training and testing data frames
+BostonTrain <- Boston[indicesTraining,]
+BostonTest <- Boston[indicesTesting,]
+
+
+m1 <- lm(nox ~ ., data=BostonTrain)
+m2 <- lm(nox ~ indus + age + dis + rad + ptratio + medv, data=BostonTrain)
+m3 <- smooth.spline(BostonTrain$dis, BostonTrain$nox, cv=T)
+m4 <- Tps(BostonTrain[, c(3, 7, 8, 9, 11, 14)], BostonTrain$nox)
+```
+
+### Part (a)
+Maybe m2 would perform the best to me because nox looks like it would do well with some sort of linear model based on its plot, and using the significant predictors only would likely have a slightly better prediction due to less overfitting. Similar could be said for m4 and the Thin Plate Splines using only the significant predictors from the linear model, however, so I'm not entirely sure.
+
+### Part (b)
+```{r}
+y <- BostonTest$nox
+
+yhat1 <- predict(m1, newdata=BostonTest)
+yhat2 <- predict(m2, newdata=BostonTest)
+yhat3 <- predict(m3, BostonTest$dis)$y
+yhat4 <- predict(m4, y=BostonTest$nox)
+
+cat("TestRSS1: ", sum((y-yhat1)^2),
+  "\nTestRSS2: ", sum((y-yhat2)^2),
+  "\nTestRSS3: ", sum((y-yhat3)^2),
+  "\nTestRSS4: ", sum((y-yhat4)^2))
+```
