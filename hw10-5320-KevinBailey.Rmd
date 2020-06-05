@@ -1,0 +1,150 @@
+---
+title: "STA 5320 Homework 10"
+author: "Kevin Bailey"
+date: "April 17, 2019"
+output: html_document
+---
+## 5
+```{r}
+library(MASS)
+set.seed(548)
+
+propTraining <- 0.5
+propTesting <- 0.5
+
+nTraining <- floor(propTraining*nrow(Boston))
+nTest <- floor(propTesting*nrow(Boston))
+
+# find indices for training and test sets
+indicesTraining <- sort(sample(1:nrow(Boston),size=nTraining))
+indicesTesting <- setdiff(1:nrow(Boston), indicesTraining)
+
+# make training and testing data frames
+BostonTrain <- Boston[indicesTraining,]
+BostonTest <- Boston[indicesTesting,]
+```
+
+### Part (a)
+```{r}
+BostonTrain$noxProp <- (BostonTrain$nox > 0.5) # Making a column called noxProp that is true if the nox level from training set is larger than 0.5, and false otherwise.
+
+BostonTest$noxProp <- (BostonTest$nox > 0.5) # Same as above but for test set instead of training.
+
+fit.logistic <- glm(noxProp ~ age+dis, family="binomial", data=BostonTrain) # Making a logistic regression model to predict the proportion of nox levels from age and distance. 
+```
+
+### Part (b)
+```{r}
+# Need to interpret coefficients.
+summary(fit.logistic) # I think the estimates have to do with odds ratio? 
+```
+These coefficients show the log odds ratio, so if we were to undo the log for age, we would have $e^{0.04681} = 1.048$, which means there is a roughly 5% increase in proportion of nox levels as age increases by 1. 
+
+Similarly for distance, we have $e^{-0.87} = 0.42$, so the proportion of nox levels are decreasing by about 58% per one unit increase in distance. 
+
+I think this is how they are interpreted? Either way, age has a positive coefficient so it will increase noxProp as it increases(although slightly), and dis has a negative one so as dis increases it will decrease noxProp. This is shown clearly in our plots we make later. 
+
+
+### Part (c)
+```{r}
+fit.logistic.probs <- predict(fit.logistic, type="response")
+fit.logistic.pred.tr <- rep("FALSE", nrow(BostonTrain))
+fit.logistic.pred.tr[fit.logistic.probs > 0.5] <- "TRUE"
+
+table(fit.logistic.pred.tr, BostonTrain$noxProp) # Confusion Matrix
+
+fp <- table(fit.logistic.pred.tr, BostonTrain$noxProp)[1,2]
+N <- table(fit.logistic.pred.tr, BostonTrain$noxProp)[1,1] + table(fit.logistic.pred.tr, BostonTrain$noxProp)[1,2] # false pos + true neg
+
+fpr_train <- fp / N
+```
+
+### Part (d)
+```{r}
+fit.logistic.pred.te <- rep("FALSE", nrow(BostonTest))
+fit.logistic.pred.te[fit.logistic.probs > 0.5] <- "TRUE"
+
+table(fit.logistic.pred.te, BostonTest$noxProp) # Confusion Matrix
+
+fp <- table(fit.logistic.pred.te, BostonTest$noxProp)[1,2]
+N <- table(fit.logistic.pred.te, BostonTest$noxProp)[1,1] + table(fit.logistic.pred.te, BostonTest$noxProp)[1,2] # false pos + true neg
+
+fpr_test <- fp / N
+```
+
+### Part (e)
+```{r}
+# False Positive Rate on training data
+fpr_train
+
+# False Positive Rate on test data
+fpr_test
+```
+
+## 6
+### Part (a)
+```{r}
+BostonTrain$col <- rep("blue", nTraining) # Making a column in the training set representing the color blue, which is the default value here.
+
+BostonTrain$col[BostonTrain$nox > 0.5] <- "red" # In the spots where nox is above 0.5, make the color column red instead of blue.
+
+plot(BostonTrain$age, BostonTrain$dis, col=BostonTrain$col, pch=16) # Plotting age on the horizontal axis and distance on the vertical, with the color of dots representing nox levels. 
+```
+
+### Part (b)
+```{r}
+correct <- (BostonTrain$noxProp == fit.logistic.pred.tr) # Putting whether our predictions were correct or not into a variable
+
+j <- which(correct == FALSE) # Getting the indices where our corrections were wrong
+
+# Need to plot again because different code block.
+plot(BostonTrain$age, BostonTrain$dis, col=BostonTrain$col, pch=16) 
+
+points(BostonTrain$age[j], BostonTrain$dis[j], col="black", pch=4) # Plotting our wrong predictions with an "x"
+```
+
+### Part (c)
+```{r}
+BostonTest$col <- rep("blue", nTraining) # Making a column in the training set representing the color blue, which is the default value here.
+
+BostonTest$col[BostonTest$nox > 0.5] <- "red" # In the spots where nox is above 0.5, make the color column red instead of blue.
+
+plot(BostonTest$age, BostonTest$dis, col=BostonTest$col, pch=16) # Plotting age on the horizontal axis and distance on the vertical, with the color of dots representing nox levels. 
+
+correct <- (BostonTest$noxProp == fit.logistic.pred.te) # Putting whether our predictions were correct or not into a variable
+
+j <- which(correct == FALSE) # Getting the indices where our corrections were wrong
+
+points(BostonTest$age[j], BostonTest$dis[j], col="black", pch=4) # Plotting our wrong predictions with an "x"
+```
+
+### Part (d)
+When evaluating on the test set, we have a lot more incorrect predictions than on the training set. Also, just looking at the plots, older units(higher age) and lower distance to five employment centers seems to have consistently higher nox levels(in the upper half). The test set has some different parts compared to the training set though, in that there are more units that are older but with higher distances to the employment centers, which can be part of the mispredictions as those kinds of points aren't really there in our training set. Even many of the lower nox levels with lower age and higher distance seemed to be mispredicted on the test set.
+
+## 7
+### Part (a)
+```{r}
+library(e1071)
+```
+
+Regardless of test or training plots that we look at, it doesn't seem possible to construct a maximal margin classifier because no matter which line we choose, there will be observations on the wrong side. 
+
+### Part (b)
+```{r}
+BostonTrain$noxProp <- as.factor(BostonTrain$noxProp)
+BostonTest$noxProp <- as.factor(BostonTest$noxProp)
+svmfit <- svm(noxProp ~ age + dis, data=BostonTrain, kernel="linear", cost=10)
+```
+
+### Part (c)
+```{r}
+plot(svmfit, BostonTrain, dis~age)
+```
+
+### Part (d)
+```{r}
+plot(svmfit, BostonTest, dis~age)
+```
+
+### Part (e)
+These plots look a bit different from the ones before, as these show many more wrong predictions than our logistic regression did. Not sure what else to say here.
