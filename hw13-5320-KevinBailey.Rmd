@@ -1,0 +1,139 @@
+---
+title: "STA 5320 Homework 13"
+author: "Kevin Bailey"
+date: "May 13, 2019"
+output: html_document
+---
+
+### Number 3
+#### Part (a)
+```{r}
+library(MASS) # For Boston
+library(DiceKriging) # For GPs
+
+set.seed(948)
+
+propTraining <- 0.5
+propTesting <- 0.5
+
+nTraining <- floor(propTraining*nrow(Boston))
+nTest <- floor(propTesting*nrow(Boston))
+
+indicesTraining <- sort(sample(1:nrow(Boston), size=nTraining))
+indicesTesting <- setdiff(1:nrow(Boston), indicesTraining)
+
+BostonTrain <- Boston[indicesTraining,]
+BostonTest <- Boston[indicesTesting,]
+```
+
+#### Part (b)
+```{r}
+m1 <- km(~1, design=data.frame(dis=BostonTrain$dis), response=BostonTrain$nox, nugget.estim=T) # Think can use dis, x, anything here for design. 
+```
+
+#### Part (c)
+```{r}
+m2 <- km(~I(dis^2), design=data.frame(dis=BostonTrain$dis), response=BostonTrain$nox, nugget.estim=T)
+```
+
+#### Part (d)
+```{r}
+m3 <- km(~I(1/dis), design=data.frame(dis=BostonTrain$dis), response=BostonTrain$nox, nugget.estim=T)
+```
+
+#### Part (e)
+```{r}
+par(mfrow=c(2,2))
+xmesh <- seq(0.5, 15, by=0.1)
+pred1 <- predict(m1, newdata=data.frame(dis=xmesh), type="UK")
+pred2 <- predict(m2, newdata=data.frame(dis=xmesh), type="UK")
+pred3 <- predict(m3, newdata=data.frame(dis=xmesh), type="UK")
+
+plot(BostonTrain$dis, BostonTrain$nox)
+lines(xmesh, pred1$mean, col="green")
+lines(xmesh, pred1$lower95, col="green")
+lines(xmesh, pred1$upper95, col="green")
+
+plot(BostonTrain$dis, BostonTrain$nox)
+lines(xmesh, pred2$mean, col="blue")
+lines(xmesh, pred2$lower95, col="blue")
+lines(xmesh, pred2$upper95, col="blue")
+
+plot(BostonTrain$dis, BostonTrain$nox)
+lines(xmesh, pred3$mean, col="red")
+lines(xmesh, pred3$lower95, col="red")
+lines(xmesh, pred3$upper95, col="red")
+```
+
+From these plots, the first two look similar with some slight differences towards the ends, but the third one looks to have a more narrow confidence interval(especially towards the dis=0 area). The first one looks the most smooth, with the blue one being similar, but the red one being far more jagged. 
+
+### Number 4
+#### Part (a)
+```{r}
+cor(BostonTrain, method="spearman")[5,]
+```
+With correlation to nox, the variables with $|\rho| > 0.5$ are crim, zn, indus, age, dis, rad, tax, lstat, and medv. Not including nox, as the correlation with itself is obviously 1.
+
+#### Part (b)
+```{r}
+m4 <- km(~1, design=BostonTrain[,c(1, 2, 3, 7, 8, 9, 10, 13, 14)], response=BostonTrain$nox, nugget.estim=T)
+```
+
+#### Part (c)
+```{r}
+m5 <- km(~1, design=BostonTrain[,-5], response=BostonTrain$nox, nugget.estim=T)
+```
+
+#### Part (d)
+```{r}
+pred1 <- predict(m1, newdata=data.frame(dis=BostonTest$dis), type="UK")
+pred2 <- predict(m2, newdata=data.frame(dis=BostonTest$dis), type="UK")
+pred3 <- predict(m3, newdata=data.frame(dis=BostonTest$dis), type="UK")
+
+pred4 <- predict(m4, newdata=BostonTest[,c(1, 2, 3, 7, 8, 9, 10, 13, 14)], type="UK")
+pred5 <- predict(m5, newdata=BostonTest[,-5], type="UK")
+
+#pred4 <- predict(m4, newdata=data.frame(crim=BostonTest$crim, zn=BostonTest$zn, indus=BostonTest$indus, age=BostonTest$age, dis=BostonTest$dis, rad=BostonTest$rad, tax=BostonTest$tax, lstat=BostonTest$lstat, medv=BostonTest$medv), type="UK")
+
+#pred5 <- predict(m5, newdata=data.frame(crim=BostonTest$crim, zn=BostonTest$zn, indus=BostonTest$indus, chas=BostonTest$indus, rm=BostonTest$rm, age=BostonTest$age, dis=BostonTest$dis, rad=BostonTest$rad, tax=BostonTest$tax, ptratio=BostonTest$ptratio, black=BostonTest$black, lstat=BostonTest$lstat, medv=BostonTest$medv), type="UK")
+```
+
+#### Part (e)
+```{r}
+sum((pred1$mean-BostonTest$nox)^2)
+sum((pred2$mean-BostonTest$nox)^2)
+sum((pred3$mean-BostonTest$nox)^2)
+sum((pred4$mean-BostonTest$nox)^2)
+sum((pred5$mean-BostonTest$nox)^2)
+```
+
+m5 includes all the predictors who weren't really corellated with the response at all, so it kind of makes sense for it to be the lowest since it uses everything(potentially overfitting though?), but only slightly better than m4. m4 Seems to be a large improvement over the others, and m5 is only slightly better.  
+
+### Number 5
+#### Part (a)
+```{r}
+BostonTest$nox > pred1$lower95 - 1.96*m1@covariance@nugget
+BostonTest$nox < pred1$upper95 - 1.96*m1@covariance@nugget
+```
+
+The above lines of code are seeing which observations of the test set for nox levels are outside the range of the 95% confidence interval for model 1. 
+
+#### Part (b)
+```{r}
+p1 <- mean(BostonTest$nox > pred1$lower95 - 1.96*m1@covariance@nugget & BostonTest$nox < pred1$upper95 + 1.96 * m1@covariance@nugget); p1
+```
+
+This line above gives the percentage of observations that lie inside the 95% confidence interval for model 1. We are looking at GREATER THAN the lower 95% while taking away the lower 95% CL boundary, and doing similar with the upper 9% boundary but with less than. 
+
+#### Part (c)
+```{r}
+p2 <- mean(BostonTest$nox > pred2$lower95 - 1.96*m2@covariance@nugget & BostonTest$nox < pred2$upper95 + 1.96 * m2@covariance@nugget); p2
+
+p3 <- mean(BostonTest$nox > pred3$lower95 - 1.96*m3@covariance@nugget & BostonTest$nox < pred3$upper95 + 1.96 * m3@covariance@nugget); p3
+
+p4 <- mean(BostonTest$nox > pred4$lower95 - 1.96*m4@covariance@nugget & BostonTest$nox < pred4$upper95 + 1.96 * m4@covariance@nugget); p4
+
+p5 <- mean(BostonTest$nox > pred5$lower95 - 1.96*m5@covariance@nugget & BostonTest$nox < pred5$upper95 + 1.96 * m5@covariance@nugget); p5
+```
+
+All of them are around the 92-93% range, so not quite at the 95% mark but very near. 
