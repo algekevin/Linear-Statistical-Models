@@ -1,0 +1,52 @@
+---
+title: "5320-hw11-KevinBailey"
+output: html_document
+---
+
+```{r}
+library(ISLR) # For Auto
+library(e1071) # For SVM
+```
+## Number 1
+
+### Part (a)
+```{r}
+set.seed(1) # Leaving this in beacuse radial was changing the gamma with CV often.
+auto <- Auto
+auto$high_mpg <- as.factor(ifelse(Auto$mpg >= median(Auto$mpg), 1, 0))
+auto <- auto[, -1]
+```
+
+### Part (b)
+```{r}
+sv_classifier <- svm(high_mpg ~ horsepower + displacement,  data=auto, cost=c(0.1, 0.5, 1.5, 10, 25, 100), kernel="linear") # Should it be a linear kernel? Don't think I should put the cost like this in a svm, but it's not used so I'm leaving it here to confirm. Same with when this appears in other spots. 
+
+tune.out <- tune(svm, high_mpg~horsepower + displacement, data=auto, kernel="linear", ranges=list(cost=c(0.1, 0.5, 1.5, 10, 25, 100), gamma=c(0.5,1,2,3,4))); summary(tune.out)
+# So best cost is 0.1, best gamma is 0.5
+```
+
+### Part (c)
+```{r}
+sv_radial <- svm(high_mpg ~ horsepower + displacement, data=auto, ranges=list(cost=c(0.1, 0.5, 1.5, 10, 25, 100), gamma=c(.5, 1, 2, 3, 4))) # Defaults to radial kernel, but not used so doesn't matter.
+
+sv_poly <- svm(high_mpg ~ horsepower + displacement, data=auto, cost=c(0.1, 0.5, 1.5, 10, 25, 100), kernel="polynomial") # Again, using c() for cost is weird here and probably not right, but it isn't used so shouldn't matter. 
+
+tune.out2 <- tune(svm, high_mpg ~ horsepower + displacement, data=auto, kernel="radial", ranges=list(cost=c(0.1, 0.5, 1.5, 10, 25, 100), gamma=c(0.5, 1, 2, 3, 4))); summary(tune.out2) # best cost 100, best gamma 4
+
+tune.out3 <- tune(svm, high_mpg ~ horsepower + displacement, data=auto, kernel="polynomial", ranges=list(cost=c(0.1, 0.5, 1.5, 10, 25, 100), d=c(2, 3, 4))); summary(tune.out3) # best cost 10, best d 3
+```
+
+### Part (d)
+```{r}
+best_radial <- svm(high_mpg ~ horsepower + displacement, data=auto, cost=100, gamma=4)
+best_poly <- svm(high_mpg ~ horsepower + displacement, data=auto, cost=10, d=3, kernel="polynomial")
+
+plot(best_radial, auto, horsepower ~ displacement) 
+plot(best_poly, auto, horsepower ~ displacement)
+
+# ----- Extreme Cases for Radial Kernel ----- #
+plot(svm(high_mpg ~ horsepower + displacement, data=auto, cost = 0.1, gamma=0.5,), auto, horsepower ~ displacement)
+plot(svm(high_mpg ~ horsepower + displacement, data=auto, cost = 1000, gamma=0.5), auto, horsepower ~ displacement)
+plot(svm(high_mpg ~ displacement + horsepower, data=auto, cost = 0.1, gamma=4), auto, horsepower ~ displacement)
+plot(svm(high_mpg ~ displacement + horsepower, data=auto, cost = 1000, gamma=4), auto, horsepower ~ displacement)
+```
